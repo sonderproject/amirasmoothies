@@ -889,6 +889,7 @@
 
     let bubbles = [], droplets = [];
     let W = 0, H = 0, dpr = 1, nextAutoPop = 0;
+    let layout = null; // title font sizes/baselines + gradient for the text underlay
     const pointer = { x: -9999, y: -9999, in: false };
     let needsClear = false;
 
@@ -932,42 +933,52 @@
       canvas.width = W * dpr;
       canvas.height = H * dpr;
 
+      const y1 = fs1 * 0.9;
+      const y2 = fs1 * 0.9 + gap + fs2 * 0.92;
+
+      // Gradient + metrics for the readable text underlay drawn each frame.
+      const tg = ctx.createLinearGradient(0, 0, 0, H);
+      tg.addColorStop(0,    '#ffffff');
+      tg.addColorStop(0.45, '#ffe9f0');
+      tg.addColorStop(0.8,  '#FFB7C5');
+      tg.addColorStop(1,    '#FF7043');
+      layout = { fs1, fs2, y1, y2, grad: tg };
+
       const off = document.createElement('canvas');
       off.width = W; off.height = H;
       const o = off.getContext('2d');
       o.fillStyle = '#000';
       o.textAlign = 'center';
       o.font = `900 ${fs1}px Fraunces, serif`;
-      o.fillText("Amira's", W / 2, fs1 * 0.9);
+      o.fillText("Amira's", W / 2, y1);
       o.font = `900 ${fs2}px Fraunces, serif`;
-      o.fillText('Smoothies', W / 2, fs1 * 0.9 + gap + fs2 * 0.92);
+      o.fillText('Smoothies', W / 2, y2);
       const data = o.getImageData(0, 0, W, H).data;
       const ink = (x, y) =>
         x >= 0 && y >= 0 && x < W && y < H &&
         data[(((y | 0) * W) + (x | 0)) * 4 + 3] > 128;
 
-      // Dense, low-jitter grid keeps the letterforms crisp and readable.
-      const step = Math.max(7, Math.round(fs2 / 15));
+      // Big foamy bubbles — the readable text underlay carries legibility,
+      // so the bubbles can be large, loose and overlapping.
+      const step = Math.max(11, Math.round(fs2 / 8.5));
       bubbles = [];
       for (let y = step / 2; y < H; y += step) {
         for (let x = step / 2; x < W; x += step) {
           if (!ink(x, y)) continue;
-          // Is this an interior point (lots of ink around it) or an edge?
-          // Big accent bubbles only spawn deep inside strokes so they never
-          // bleed past a letter's outline and muddy the word.
-          const room = step * 1.4;
+          // Interior points (ink on all sides) host the really big bubbles.
+          const room = step * 1.1;
           const interior = ink(x - room, y) && ink(x + room, y) &&
                            ink(x, y - room) && ink(x, y + room);
           const roll = Math.random();
-          let tier = 1;                              // small — defines the shape
-          if (interior && roll < 0.05) tier = 2.15;  // big accent
-          else if (interior && roll < 0.16) tier = 1.5; // medium
+          let tier = 1;                                 // regular (already big)
+          if (interior && roll < 0.08) tier = 2.3;      // giant accent
+          else if (roll < 0.28) tier = 1.55;            // extra-large
 
-          const jit = step * (tier > 1 ? 0.05 : 0.12);
+          const jit = step * 0.1;
           bubbles.push({
             tx: x + rand(-jit, jit),
             ty: y + rand(-jit, jit),
-            base: step * 0.62 * tier * rand(0.92, 1.06),
+            base: step * 0.8 * tier * rand(0.9, 1.1),
             tier,
             sp: sprites[(Math.random() * sprites.length) | 0],
             phase: Math.random() * Math.PI * 2,
@@ -1029,6 +1040,29 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
       const t = now / 1000;
+
+      // Readable title underlay — the actual words in glossy type beneath
+      // the bubble foam, fading out as the bubbles scatter.
+      if (layout) {
+        ctx.save();
+        ctx.globalAlpha = (1 - sE) * 0.95;
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(58,46,63,0.30)';
+        ctx.shadowBlur = 16;
+        ctx.shadowOffsetY = 8;
+        ctx.fillStyle = layout.grad;
+        ctx.font = `900 ${layout.fs1}px Fraunces, serif`;
+        ctx.fillText("Amira's", W / 2, layout.y1);
+        ctx.font = `900 ${layout.fs2}px Fraunces, serif`;
+        ctx.fillText('Smoothies', W / 2, layout.y2);
+        ctx.shadowColor = 'transparent';
+        ctx.lineWidth = Math.max(1.5, layout.fs2 * 0.012);
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.strokeText('Smoothies', W / 2, layout.y2);
+        ctx.font = `900 ${layout.fs1}px Fraunces, serif`;
+        ctx.strokeText("Amira's", W / 2, layout.y1);
+        ctx.restore();
+      }
 
       // Idle liveliness: pop a random bubble now and then so the title is
       // always gently fizzing even when nobody is interacting.
