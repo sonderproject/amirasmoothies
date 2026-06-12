@@ -142,7 +142,27 @@
     box-shadow: 0 10px 30px rgba(58,46,63,.12);
   }
 
-  /* ---- 3D BUBBLE TEXT ---- */
+  /* ---- BUBBLE TEXT STAGE (canvas particle title) ---- */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .bubble-stage {
+    position: relative;
+    width: min(94vw, 1040px);
+    margin: 0 auto;
+  }
+  #bubbleCanvas {
+    display: none;
+    width: 100%;
+    touch-action: manipulation;
+    cursor: pointer;
+  }
+  .bubble-stage.js-bubbles #bubbleCanvas { display: block; }
+  .bubble-stage.js-bubbles .bubble-fallback { display: none; }
+
+  /* ---- 3D BUBBLE TEXT (static fallback) ---- */
   .bubble {
     font-family: var(--head);
     font-weight: 900;
@@ -591,14 +611,19 @@
 
   <div class="hero__content" data-parallax="-0.08">
     <span class="hero__kicker">🌺 Fresh blends · San Diego</span>
-    <h1 class="bubble" aria-label="Amira's Smoothies">
-      <span class="line line--one" aria-hidden="true">
-        <span>A</span><span>m</span><span>i</span><span>r</span><span>a</span><span>'</span><span>s</span>
-      </span>
-      <span class="line line--two" aria-hidden="true">
-        <span>S</span><span>m</span><span>o</span><span>o</span><span>t</span><span>h</span><span>i</span><span>e</span><span>s</span>
-      </span>
-    </h1>
+    <h1 class="sr-only">Amira's Smoothies</h1>
+    <div class="bubble-stage" id="bubbleStage" aria-hidden="true">
+      <canvas id="bubbleCanvas"></canvas>
+      <!-- static fallback shown when JS is off or reduced motion is preferred -->
+      <div class="bubble bubble-fallback">
+        <span class="line line--one">
+          <span>A</span><span>m</span><span>i</span><span>r</span><span>a</span><span>'</span><span>s</span>
+        </span>
+        <span class="line line--two">
+          <span>S</span><span>m</span><span>o</span><span>o</span><span>t</span><span>h</span><span>i</span><span>e</span><span>s</span>
+        </span>
+      </div>
+    </div>
     <p class="hero__sub">Sun-ripened fruit, blended fresh, and poured wherever the good vibes are. Catch us at a park near you.</p>
     <a class="btn" href="#flavors">Meet the flavors</a>
   </div>
@@ -840,6 +865,223 @@
       });
     }, { threshold: 0.18 });
     items.forEach(el => io.observe(el));
+  })();
+
+  /* =========================================================
+     BUBBLE TITLE — canvas particle system
+     Bubbles spell out "Amira's / Smoothies", tinted with the
+     brand palette in assorted sizes. Hovering/tapping pops
+     them (they reform after a beat); scrolling away scatters
+     them, scrolling back re-forms the words.
+     ========================================================= */
+  (function () {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const canvas = document.getElementById('bubbleCanvas');
+    const stage  = document.getElementById('bubbleStage');
+    const hero   = document.querySelector('.hero');
+    if (!canvas || !stage || reduce) return;
+
+    const ctx = canvas.getContext('2d');
+    const PALETTE = ['#A8D8EA', '#FFB7C5', '#FFF9C4', '#FF7043'];
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+    const easeOutBack = s => 1 + 2.7 * Math.pow(s - 1, 3) + 1.7 * Math.pow(s - 1, 2);
+
+    let bubbles = [], droplets = [];
+    let W = 0, H = 0, dpr = 1;
+    const pointer = { x: -9999, y: -9999, in: false };
+    let needsClear = false;
+
+    /* --- pre-rendered glossy bubble sprites (one per palette color) --- */
+    const sprites = PALETTE.map(hex => {
+      const n = parseInt(hex.slice(1), 16);
+      const r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+      const s = document.createElement('canvas');
+      s.width = s.height = 96;
+      const c = s.getContext('2d');
+      const cx = 48, cy = 48, R = 44;
+      const grad = c.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.05, cx, cy, R);
+      grad.addColorStop(0,   'rgba(255,255,255,0.95)');
+      grad.addColorStop(0.3, `rgba(${r},${g},${b},0.50)`);
+      grad.addColorStop(0.8, `rgba(${r},${g},${b},0.32)`);
+      grad.addColorStop(1,   `rgba(${r},${g},${b},0.78)`);
+      c.fillStyle = grad;
+      c.beginPath(); c.arc(cx, cy, R, 0, 7); c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.55)';
+      c.lineWidth = 2.5; c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.9)';
+      c.beginPath(); c.ellipse(cx - R * 0.38, cy - R * 0.42, R * 0.2, R * 0.11, -0.6, 0, 7); c.fill();
+      return s;
+    });
+
+    /* --- rasterize the title offscreen and sample it into bubbles --- */
+    function build() {
+      const rect = stage.getBoundingClientRect();
+      W = Math.max(300, Math.round(rect.width));
+      const meas = document.createElement('canvas').getContext('2d');
+      meas.font = '900 100px Fraunces, serif';
+      const w1 = meas.measureText("Amira's").width;
+      const w2 = meas.measureText('Smoothies').width;
+      const fs2 = (W * 0.94) / w2 * 100;
+      const fs1 = Math.min(fs2 * 0.8, (W * 0.78) / w1 * 100);
+      const gap = fs2 * 0.14;
+      H = Math.round(fs1 + gap + fs2 * 1.06);
+
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.style.height = H + 'px';
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
+
+      const off = document.createElement('canvas');
+      off.width = W; off.height = H;
+      const o = off.getContext('2d');
+      o.fillStyle = '#000';
+      o.textAlign = 'center';
+      o.font = `900 ${fs1}px Fraunces, serif`;
+      o.fillText("Amira's", W / 2, fs1 * 0.9);
+      o.font = `900 ${fs2}px Fraunces, serif`;
+      o.fillText('Smoothies', W / 2, fs1 * 0.9 + gap + fs2 * 0.92);
+      const data = o.getImageData(0, 0, W, H).data;
+
+      const step = Math.max(9, Math.round(fs2 / 12));
+      bubbles = [];
+      for (let y = step / 2; y < H; y += step) {
+        for (let x = step / 2; x < W; x += step) {
+          if (data[((y | 0) * W + (x | 0)) * 4 + 3] > 128) {
+            const jit = step * 0.18;
+            bubbles.push({
+              tx: x + rand(-jit, jit),
+              ty: y + rand(-jit, jit),
+              r: step * rand(0.4, 0.78) * (Math.random() < 0.07 ? 1.45 : 1),
+              sp: sprites[(Math.random() * sprites.length) | 0],
+              phase: Math.random() * Math.PI * 2,
+              spd: rand(0.8, 1.7),
+              state: 'alive', respawnAt: 0, reformStart: 0,
+              x: 0, y: 0,
+              // scatter direction: drift up and outward like real bubbles
+              scX: rand(-1, 1), scY: rand(-1.4, -0.25), scD: rand(0.4, 1.2)
+            });
+          }
+        }
+      }
+    }
+
+    function pop(b, now) {
+      b.state = 'gone';
+      b.respawnAt = now + 1000 + Math.random() * 1200;
+      for (let i = 0; i < 6; i++) {
+        const a = Math.random() * Math.PI * 2, v = rand(0.6, 2.6);
+        droplets.push({
+          x: b.x, y: b.y,
+          vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.9,
+          r: Math.max(1.4, b.r * rand(0.12, 0.3)),
+          life: 1, sp: b.sp
+        });
+      }
+      droplets.push({ ring: true, x: b.x, y: b.y, r: b.r * 0.8, life: 1 });
+    }
+
+    function tryPop(now) {
+      for (const b of bubbles) {
+        if (b.state !== 'alive') continue;
+        const dx = b.x - pointer.x, dy = b.y - pointer.y;
+        if (dx * dx + dy * dy < (b.r + 7) * (b.r + 7)) pop(b, now);
+      }
+    }
+
+    function frame(now) {
+      requestAnimationFrame(frame);
+      // scatter progress: 0 = hero in view (words formed), 1 = fully scattered
+      const top = hero.getBoundingClientRect().top;
+      const p = clamp(-top / (window.innerHeight * 0.6), 0, 1);
+      const sE = p * p;
+
+      if (p >= 1 && droplets.length === 0) {
+        if (needsClear) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H); needsClear = false; }
+        return;
+      }
+      needsClear = true;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      const t = now / 1000;
+
+      for (const b of bubbles) {
+        if (b.state === 'gone') {
+          if (now >= b.respawnAt) { b.state = 'reform'; b.reformStart = now; }
+          else continue;
+        }
+        let scale = 1, fade = 1;
+        if (b.state === 'reform') {
+          const s = (now - b.reformStart) / 550;
+          if (s >= 1) b.state = 'alive';
+          else { scale = easeOutBack(Math.min(1, s)); fade = Math.min(1, s * 2); }
+        }
+        // gentle bob + scroll scatter offset
+        let x = b.tx + Math.sin(t * b.spd + b.phase) * 3 + b.scX * sE * W * 0.45 * b.scD;
+        let y = b.ty + Math.cos(t * b.spd * 0.9 + b.phase) * 2.5 + b.scY * sE * H * 1.1 * b.scD;
+        // nudge away from the pointer so nearby bubbles feel alive
+        if (pointer.in) {
+          const dx = x - pointer.x, dy = y - pointer.y;
+          const d = Math.hypot(dx, dy);
+          if (d > 0.01 && d < 70) {
+            const f = (70 - d) / 70 * 9;
+            x += dx / d * f; y += dy / d * f;
+          }
+        }
+        b.x = x; b.y = y;
+        const r = Math.max(0.5, b.r * scale);
+        ctx.globalAlpha = (1 - sE) * fade;
+        ctx.drawImage(b.sp, x - r, y - r, r * 2, r * 2);
+      }
+
+      // pop debris: droplets + expanding rings
+      for (let i = droplets.length - 1; i >= 0; i--) {
+        const d = droplets[i];
+        if (d.ring) {
+          d.r *= 1.12; d.life -= 0.08;
+          if (d.life <= 0) { droplets.splice(i, 1); continue; }
+          ctx.globalAlpha = d.life * 0.7;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.stroke();
+        } else {
+          d.x += d.vx; d.y += d.vy; d.vy += 0.07; d.life -= 0.035;
+          if (d.life <= 0) { droplets.splice(i, 1); continue; }
+          ctx.globalAlpha = d.life;
+          ctx.drawImage(d.sp, d.x - d.r, d.y - d.r, d.r * 2, d.r * 2);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function updatePointer(e) {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = (e.clientX - rect.left) * (W / rect.width);
+      pointer.y = (e.clientY - rect.top) * (H / rect.height);
+      pointer.in = true;
+      tryPop(performance.now());
+    }
+    canvas.addEventListener('pointermove', updatePointer, { passive: true });
+    canvas.addEventListener('pointerdown', updatePointer, { passive: true });
+    canvas.addEventListener('pointerleave', () => { pointer.in = false; pointer.x = pointer.y = -9999; });
+
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(build, 200);
+    });
+
+    const start = () => {
+      stage.classList.add('js-bubbles');
+      build();
+      requestAnimationFrame(frame);
+    };
+    if (document.fonts && document.fonts.load) {
+      document.fonts.load('900 100px Fraunces').then(start).catch(start);
+    } else {
+      start();
+    }
   })();
 </script>
 </body>
