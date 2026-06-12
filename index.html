@@ -51,6 +51,13 @@
 
   a { color: inherit; }
 
+  ::selection { background: var(--pink); color: #fff; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero__rays, .hero__haze, .orb, .sparkle { animation: none !important; }
+    .orb { display: none; }
+  }
+
   .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
 
   .eyebrow {
@@ -82,10 +89,11 @@
     inset: -10% -10% -10% -10%;
     z-index: -3;
     background:
-      radial-gradient(60% 50% at 20% 18%, rgba(255,183,197,.95) 0%, rgba(255,183,197,0) 60%),
-      radial-gradient(55% 50% at 85% 22%, rgba(255,249,196,.95) 0%, rgba(255,249,196,0) 62%),
-      radial-gradient(70% 60% at 78% 85%, rgba(255,112,67,.55) 0%, rgba(255,112,67,0) 60%),
-      linear-gradient(180deg, var(--blue) 0%, #c8e6f0 45%, var(--yellow) 100%);
+      radial-gradient(60% 50% at 20% 18%, rgba(255,183,197,.85) 0%, rgba(255,183,197,0) 62%),
+      radial-gradient(55% 50% at 85% 22%, rgba(255,249,196,.9) 0%, rgba(255,249,196,0) 64%),
+      radial-gradient(70% 60% at 78% 85%, rgba(255,142,100,.42) 0%, rgba(255,112,67,0) 62%),
+      radial-gradient(50% 40% at 30% 90%, rgba(255,255,255,.5) 0%, rgba(255,255,255,0) 70%),
+      linear-gradient(180deg, #b8e0ef 0%, #d3ecf4 45%, #fffbd9 100%);
     will-change: transform;
   }
 
@@ -102,6 +110,90 @@
     border-radius: 50%;
     filter: blur(2px);
     will-change: transform;
+  }
+
+  /* slow-turning golden sun rays — dreamy summer light */
+  .hero__rays {
+    position: absolute;
+    top: 12%;
+    left: 50%;
+    width: 170vmin;
+    height: 170vmin;
+    z-index: -2;
+    pointer-events: none;
+    background: repeating-conic-gradient(from 0deg,
+      rgba(255,255,255,0)   0deg  9deg,
+      rgba(255,249,196,.20) 9deg 13deg,
+      rgba(255,255,255,0)  13deg 24deg);
+    border-radius: 50%;
+    mix-blend-mode: screen;
+    -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,.9) 0%, rgba(0,0,0,0) 60%);
+    mask-image: radial-gradient(circle, rgba(0,0,0,.9) 0%, rgba(0,0,0,0) 60%);
+    animation: rays 90s linear infinite;
+  }
+  @keyframes rays {
+    from { transform: translate(-50%, -32%) rotate(0deg); }
+    to   { transform: translate(-50%, -32%) rotate(360deg); }
+  }
+
+  /* drifting pastel haze — soft heat-shimmer dreaminess */
+  .hero__haze {
+    position: absolute;
+    inset: -8%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(42% 30% at 18% 68%, rgba(255,255,255,.45), transparent 70%),
+      radial-gradient(36% 28% at 76% 38%, rgba(255,183,197,.32), transparent 70%),
+      radial-gradient(46% 34% at 54% 82%, rgba(168,216,234,.34), transparent 70%);
+    filter: blur(24px);
+    animation: haze 16s ease-in-out infinite alternate;
+  }
+  @keyframes haze {
+    from { transform: translate3d(-2%, 0, 0) scale(1); }
+    to   { transform: translate3d(2%, -3%, 0) scale(1.07); }
+  }
+
+  /* ambient rising bubbles + twinkling sparkles */
+  .ambient {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .orb {
+    position: absolute;
+    bottom: -70px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%,
+      rgba(255,255,255,.95),
+      rgba(255,255,255,.30) 38%,
+      rgba(168,216,234,.14) 68%,
+      rgba(255,255,255,.40) 100%);
+    box-shadow: inset 0 0 8px rgba(255,255,255,.6), 0 0 16px rgba(255,255,255,.35);
+    opacity: 0;
+    animation: rise linear infinite;
+  }
+  @keyframes rise {
+    0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+    8%   { opacity: .85; }
+    88%  { opacity: .45; }
+    100% { transform: translate3d(var(--sway, 5vw), -112vh, 0); opacity: 0; }
+  }
+  .sparkle {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: radial-gradient(circle, #fffef5 0%, rgba(255,249,196,.9) 40%, rgba(255,255,255,0) 75%);
+    clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+    opacity: 0;
+    pointer-events: none;
+    animation: twinkle 4s ease-in-out infinite;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; transform: scale(.35) rotate(0deg); }
+    50%      { opacity: .95; transform: scale(1.2) rotate(25deg); }
   }
 
   /* parallax flower field */
@@ -588,7 +680,30 @@
      ========================================================= -->
 <header class="hero" id="top">
   <div class="hero__bg"  data-parallax="0.18"></div>
+  <div class="hero__rays" aria-hidden="true"></div>
   <div class="hero__sun" data-parallax="0.28"></div>
+  <div class="hero__haze" aria-hidden="true"></div>
+
+  <!-- ambient rising bubbles + sparkles -->
+  <div class="ambient" aria-hidden="true">
+    <span class="orb" style="left:6%;  width:22px; height:22px; animation-duration:15s; animation-delay:0s;   --sway:5vw"></span>
+    <span class="orb" style="left:14%; width:12px; height:12px; animation-duration:11s; animation-delay:4s;   --sway:-4vw"></span>
+    <span class="orb" style="left:24%; width:30px; height:30px; animation-duration:18s; animation-delay:2s;   --sway:6vw"></span>
+    <span class="orb" style="left:38%; width:10px; height:10px; animation-duration:10s; animation-delay:6.5s; --sway:-3vw"></span>
+    <span class="orb" style="left:52%; width:18px; height:18px; animation-duration:14s; animation-delay:1s;   --sway:4vw"></span>
+    <span class="orb" style="left:63%; width:26px; height:26px; animation-duration:17s; animation-delay:5s;   --sway:-6vw"></span>
+    <span class="orb" style="left:74%; width:14px; height:14px; animation-duration:12s; animation-delay:3s;   --sway:5vw"></span>
+    <span class="orb" style="left:84%; width:34px; height:34px; animation-duration:20s; animation-delay:7s;   --sway:-5vw"></span>
+    <span class="orb" style="left:92%; width:16px; height:16px; animation-duration:13s; animation-delay:0.5s; --sway:3vw"></span>
+    <span class="orb" style="left:45%; width:24px; height:24px; animation-duration:16s; animation-delay:9s;   --sway:7vw"></span>
+
+    <span class="sparkle" style="top:18%; left:20%; animation-delay:.3s"></span>
+    <span class="sparkle" style="top:30%; left:76%; animation-delay:1.4s; width:12px; height:12px"></span>
+    <span class="sparkle" style="top:12%; left:58%; animation-delay:2.5s; width:20px; height:20px"></span>
+    <span class="sparkle" style="top:56%; left:10%; animation-delay:3.2s"></span>
+    <span class="sparkle" style="top:64%; left:88%; animation-delay:.9s; width:14px; height:14px"></span>
+    <span class="sparkle" style="top:78%; left:40%; animation-delay:2s;  width:10px; height:10px"></span>
+  </div>
 
   <!-- far flowers (slow) -->
   <div class="parallax-layer" data-parallax="0.12">
@@ -770,6 +885,14 @@
      FOLLOW / CTA
      ========================================================= -->
 <section class="follow" id="follow">
+  <div class="ambient" aria-hidden="true">
+    <span class="sparkle" style="top:16%; left:14%; animation-delay:.6s"></span>
+    <span class="sparkle" style="top:28%; left:82%; animation-delay:1.8s; width:12px; height:12px"></span>
+    <span class="sparkle" style="top:70%; left:30%; animation-delay:3s;  width:20px; height:20px"></span>
+    <span class="orb" style="left:18%; width:20px; height:20px; animation-duration:14s; animation-delay:1s; --sway:4vw"></span>
+    <span class="orb" style="left:70%; width:26px; height:26px; animation-duration:17s; animation-delay:5s; --sway:-5vw"></span>
+  </div>
+
   <!-- near parallax flowers -->
   <div class="parallax-layer" data-parallax="0.22" style="z-index:0">
     <svg style="top:12%; left:8%;  width:90px;  --rot:-10deg; opacity:.5"><use href="#hibiscus"/></svg>
@@ -910,6 +1033,14 @@
       c.beginPath(); c.arc(cx, cy, R, 0, 7); c.fill();
       c.strokeStyle = 'rgba(255,255,255,0.55)';
       c.lineWidth = 2.5; c.stroke();
+      // iridescent soap-film rim: blue-to-pink sheen around the edge
+      const rim = c.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+      rim.addColorStop(0,   'rgba(168,216,234,0.6)');
+      rim.addColorStop(0.5, 'rgba(255,255,255,0.12)');
+      rim.addColorStop(1,   'rgba(255,183,197,0.6)');
+      c.strokeStyle = rim;
+      c.lineWidth = 3;
+      c.beginPath(); c.arc(cx, cy, R - 2.5, 0, 7); c.stroke();
       c.fillStyle = 'rgba(255,255,255,0.9)';
       c.beginPath(); c.ellipse(cx - R * 0.38, cy - R * 0.42, R * 0.2, R * 0.11, -0.6, 0, 7); c.fill();
       return s;
@@ -1045,8 +1176,20 @@
       // the bubble foam, fading out as the bubbles scatter.
       if (layout) {
         ctx.save();
-        ctx.globalAlpha = (1 - sE) * 0.95;
         ctx.textAlign = 'center';
+        // ethereal halo: a soft luminous glow breathing behind the words
+        const breathe = 0.75 + Math.sin(t * 0.8) * 0.25;
+        ctx.globalAlpha = (1 - sE) * 0.5 * breathe;
+        ctx.shadowColor = 'rgba(255,252,220,0.95)';
+        ctx.shadowBlur = 34;
+        ctx.shadowOffsetY = 0;
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = `900 ${layout.fs1}px Fraunces, serif`;
+        ctx.fillText("Amira's", W / 2, layout.y1);
+        ctx.font = `900 ${layout.fs2}px Fraunces, serif`;
+        ctx.fillText('Smoothies', W / 2, layout.y2);
+
+        ctx.globalAlpha = (1 - sE) * 0.95;
         ctx.shadowColor = 'rgba(58,46,63,0.30)';
         ctx.shadowBlur = 16;
         ctx.shadowOffsetY = 8;
