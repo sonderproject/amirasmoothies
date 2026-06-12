@@ -888,7 +888,7 @@
     const easeOutBack = s => 1 + 2.7 * Math.pow(s - 1, 3) + 1.7 * Math.pow(s - 1, 2);
 
     let bubbles = [], droplets = [];
-    let W = 0, H = 0, dpr = 1;
+    let W = 0, H = 0, dpr = 1, nextAutoPop = 0;
     const pointer = { x: -9999, y: -9999, in: false };
     let needsClear = false;
 
@@ -942,35 +942,59 @@
       o.font = `900 ${fs2}px Fraunces, serif`;
       o.fillText('Smoothies', W / 2, fs1 * 0.9 + gap + fs2 * 0.92);
       const data = o.getImageData(0, 0, W, H).data;
+      const ink = (x, y) =>
+        x >= 0 && y >= 0 && x < W && y < H &&
+        data[(((y | 0) * W) + (x | 0)) * 4 + 3] > 128;
 
-      const step = Math.max(9, Math.round(fs2 / 12));
+      // Dense, low-jitter grid keeps the letterforms crisp and readable.
+      const step = Math.max(7, Math.round(fs2 / 15));
       bubbles = [];
       for (let y = step / 2; y < H; y += step) {
         for (let x = step / 2; x < W; x += step) {
-          if (data[((y | 0) * W + (x | 0)) * 4 + 3] > 128) {
-            const jit = step * 0.18;
-            bubbles.push({
-              tx: x + rand(-jit, jit),
-              ty: y + rand(-jit, jit),
-              r: step * rand(0.4, 0.78) * (Math.random() < 0.07 ? 1.45 : 1),
-              sp: sprites[(Math.random() * sprites.length) | 0],
-              phase: Math.random() * Math.PI * 2,
-              spd: rand(0.8, 1.7),
-              state: 'alive', respawnAt: 0, reformStart: 0,
-              x: 0, y: 0,
-              // scatter direction: drift up and outward like real bubbles
-              scX: rand(-1, 1), scY: rand(-1.4, -0.25), scD: rand(0.4, 1.2)
-            });
-          }
+          if (!ink(x, y)) continue;
+          // Is this an interior point (lots of ink around it) or an edge?
+          // Big accent bubbles only spawn deep inside strokes so they never
+          // bleed past a letter's outline and muddy the word.
+          const room = step * 1.4;
+          const interior = ink(x - room, y) && ink(x + room, y) &&
+                           ink(x, y - room) && ink(x, y + room);
+          const roll = Math.random();
+          let tier = 1;                              // small — defines the shape
+          if (interior && roll < 0.05) tier = 2.15;  // big accent
+          else if (interior && roll < 0.16) tier = 1.5; // medium
+
+          const jit = step * (tier > 1 ? 0.05 : 0.12);
+          bubbles.push({
+            tx: x + rand(-jit, jit),
+            ty: y + rand(-jit, jit),
+            base: step * 0.62 * tier * rand(0.92, 1.06),
+            tier,
+            sp: sprites[(Math.random() * sprites.length) | 0],
+            phase: Math.random() * Math.PI * 2,
+            phase2: Math.random() * Math.PI * 2,
+            spd: rand(1.0, 2.2),
+            amp: rand(2.5, 6) * (tier > 1.4 ? 1.6 : 1),  // bob amplitude
+            pulse: rand(0.04, 0.11),                     // breathing depth
+            spin: rand(-0.5, 0.5),                       // sprite wobble speed
+            state: 'alive', respawnAt: 0, reformStart: 0,
+            x: 0, y: 0,
+            // scatter: drift up and outward like real bubbles
+            scX: rand(-1, 1), scY: rand(-1.4, -0.25), scD: rand(0.4, 1.2)
+          });
         }
       }
+      // Draw big bubbles first (behind) so the small crisp ones sit on top
+      // and the word stays sharp.
+      bubbles.sort((a, b) => b.base - a.base);
+      nextAutoPop = performance.now() + 900;
     }
 
     function pop(b, now) {
       b.state = 'gone';
-      b.respawnAt = now + 1000 + Math.random() * 1200;
-      for (let i = 0; i < 6; i++) {
-        const a = Math.random() * Math.PI * 2, v = rand(0.6, 2.6);
+      b.respawnAt = now + 800 + Math.random() * 1100;
+      const n = 5 + Math.round(b.tier * 4);   // bigger bubbles burst into more drops
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2, v = rand(0.6, 2.6) * b.tier;
         droplets.push({
           x: b.x, y: b.y,
           vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.9,
@@ -1006,6 +1030,14 @@
       ctx.clearRect(0, 0, W, H);
       const t = now / 1000;
 
+      // Idle liveliness: pop a random bubble now and then so the title is
+      // always gently fizzing even when nobody is interacting.
+      if (sE < 0.2 && now >= nextAutoPop) {
+        const alive = bubbles.filter(b => b.state === 'alive');
+        if (alive.length) pop(alive[(Math.random() * alive.length) | 0], now);
+        nextAutoPop = now + 500 + Math.random() * 900;
+      }
+
       for (const b of bubbles) {
         if (b.state === 'gone') {
           if (now >= b.respawnAt) { b.state = 'reform'; b.reformStart = now; }
@@ -1013,26 +1045,42 @@
         }
         let scale = 1, fade = 1;
         if (b.state === 'reform') {
-          const s = (now - b.reformStart) / 550;
+          const s = (now - b.reformStart) / 520;
           if (s >= 1) b.state = 'alive';
           else { scale = easeOutBack(Math.min(1, s)); fade = Math.min(1, s * 2); }
         }
-        // gentle bob + scroll scatter offset
-        let x = b.tx + Math.sin(t * b.spd + b.phase) * 3 + b.scX * sE * W * 0.45 * b.scD;
-        let y = b.ty + Math.cos(t * b.spd * 0.9 + b.phase) * 2.5 + b.scY * sE * H * 1.1 * b.scD;
+        // breathing pulse so every bubble feels buoyant
+        const pulse = 1 + Math.sin(t * b.spd * 1.6 + b.phase2) * b.pulse;
+        // bob + lateral sway + scroll scatter offset
+        let x = b.tx + Math.sin(t * b.spd + b.phase) * b.amp
+              + Math.sin(t * 0.6 + b.phase2) * 2
+              + b.scX * sE * W * 0.45 * b.scD;
+        let y = b.ty + Math.cos(t * b.spd * 0.9 + b.phase) * b.amp * 0.8
+              + b.scY * sE * H * 1.1 * b.scD;
         // nudge away from the pointer so nearby bubbles feel alive
         if (pointer.in) {
           const dx = x - pointer.x, dy = y - pointer.y;
           const d = Math.hypot(dx, dy);
-          if (d > 0.01 && d < 70) {
-            const f = (70 - d) / 70 * 9;
+          if (d > 0.01 && d < 80) {
+            const f = (80 - d) / 80 * 12;
             x += dx / d * f; y += dy / d * f;
           }
         }
         b.x = x; b.y = y;
-        const r = Math.max(0.5, b.r * scale);
+        const r = Math.max(0.5, b.base * scale * pulse);
+        b.r = r;
         ctx.globalAlpha = (1 - sE) * fade;
-        ctx.drawImage(b.sp, x - r, y - r, r * 2, r * 2);
+        // jelly wobble: rotate the sprite slowly for a living-bubble shimmer
+        const rot = Math.sin(t * b.spin + b.phase) * 0.18;
+        if (rot) {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(rot);
+          ctx.drawImage(b.sp, -r, -r, r * 2, r * 2);
+          ctx.restore();
+        } else {
+          ctx.drawImage(b.sp, x - r, y - r, r * 2, r * 2);
+        }
       }
 
       // pop debris: droplets + expanding rings
