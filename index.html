@@ -53,9 +53,68 @@
 
   ::selection { background: var(--pink); color: #fff; }
 
+  /* ============================================================
+     FIXED SUNSET SCENE — revealed as you scroll past the hero.
+     A blank orange/yellow/pink sky with drifting lotus & hibiscus.
+     ============================================================ */
+  .sunset-scene {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    pointer-events: none;
+    overflow: hidden;
+    background:
+      radial-gradient(120% 80% at 50% 116%, #ff7043 0%, rgba(255,112,67,0) 55%),
+      radial-gradient(90% 60% at 78% 8%, rgba(255,183,197,.85) 0%, rgba(255,183,197,0) 60%),
+      linear-gradient(180deg,
+        #ffb7c5 0%,
+        #ffc6a8 26%,
+        #ffd98f 50%,
+        #fff3a0 70%,
+        #ffb45e 100%);
+    opacity: 0;
+    transition: opacity .9s ease;
+  }
+  .sunset-scene.lit { opacity: 1; }
+
+  /* glowing sinking sun */
+  .sunset-sun {
+    position: absolute;
+    left: 50%;
+    bottom: 8%;
+    width: 38vmin;
+    height: 38vmin;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff7d6 0%, #ffe08a 38%, # ffb45e 62%, rgba(255,180,94,0) 72%);
+    background: radial-gradient(circle, #fff7d6 0%, #ffe08a 38%, #ffb45e 62%, rgba(255,180,94,0) 72%);
+    filter: blur(1px);
+    animation: sunGlow 7s ease-in-out infinite;
+  }
+  @keyframes sunGlow {
+    0%, 100% { transform: translateX(-50%) scale(1);    opacity: .9; }
+    50%      { transform: translateX(-50%) scale(1.05); opacity: 1; }
+  }
+
+  /* drifting flowers across the sunset sky */
+  .sunset-flower {
+    position: absolute;
+    filter: drop-shadow(0 10px 20px rgba(120,40,20,.22));
+    animation: floatAcross var(--fdur, 26s) linear infinite;
+    animation-delay: var(--fdelay, 0s);
+    opacity: var(--fop, .9);
+  }
+  @keyframes floatAcross {
+    0%   { transform: translate(var(--fx0, 0), 0) rotate(var(--frot, 0deg)); }
+    50%  { transform: translate(calc(var(--fx0, 0) + 4vw), -3.5vh) rotate(calc(var(--frot, 0deg) + 10deg)); }
+    100% { transform: translate(var(--fx0, 0), 0) rotate(var(--frot, 0deg)); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .hero__rays, .hero__haze, .orb, .sparkle { animation: none !important; }
+    .hero__rays, .hero__haze, .orb, .sparkle,
+    .sunset-flower, .sunset-sun { animation: none !important; }
     .orb { display: none; }
+    .sunset-scene { transition: none; }
   }
 
   .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
@@ -400,9 +459,7 @@
   .tagline {
     text-align: center;
     padding: 120px 0 110px;
-    background:
-      radial-gradient(70% 120% at 50% -10%, rgba(168,216,234,.5), rgba(168,216,234,0) 60%),
-      linear-gradient(180deg, #fff 0%, #fffdf2 100%);
+    background: transparent;
   }
   .tagline h2 {
     font-size: clamp(30px, 5.4vw, 62px);
@@ -424,7 +481,7 @@
      ============================================================ */
   .flavors {
     padding: 110px 0 130px;
-    background: linear-gradient(180deg, #fffdf2 0%, #fff 100%);
+    background: transparent;
   }
   .section-head { text-align: center; margin-bottom: 60px; }
   .section-head h2 {
@@ -507,9 +564,7 @@
     position: relative;
     padding: 120px 0 130px;
     overflow: hidden;
-    background:
-      radial-gradient(60% 80% at 85% 10%, rgba(255,183,197,.45), rgba(255,183,197,0) 60%),
-      linear-gradient(180deg, var(--blue) 0%, #d6eef6 100%);
+    background: transparent;
   }
   .find .grid {
     display: grid;
@@ -568,8 +623,8 @@
     text-align: center;
     overflow: hidden;
     background:
-      radial-gradient(70% 90% at 50% 0%, rgba(255,249,196,.8), rgba(255,249,196,0) 60%),
-      linear-gradient(180deg, var(--pink) 0%, var(--orange) 120%);
+      radial-gradient(70% 90% at 50% 0%, rgba(255,249,196,.55), rgba(255,249,196,0) 60%),
+      linear-gradient(180deg, rgba(255,183,197,.35) 0%, rgba(255,112,67,.55) 120%);
     color: #fff;
   }
   .follow h2 { font-size: clamp(32px, 5.4vw, 64px); font-weight: 900; text-shadow: 0 6px 18px rgba(90,30,10,.25); }
@@ -700,6 +755,21 @@
     </symbol>
   </defs>
 </svg>
+
+<!-- =========================================================
+     FIXED SUNSET SCENE — fades in as you scroll past the hero
+     ========================================================= -->
+<div class="sunset-scene" id="sunsetScene" aria-hidden="true">
+  <div class="sunset-sun"></div>
+
+  <svg class="sunset-flower" style="top:14%; left:8%;  width:120px; --fdur:30s; --frot:-12deg; --fop:.92"><use href="#hibiscus"/></svg>
+  <svg class="sunset-flower" style="top:26%; left:72%; width:150px; --fdur:38s; --fdelay:-6s; --frot:14deg; --fop:.95"><use href="#lotus"/></svg>
+  <svg class="sunset-flower" style="top:54%; left:18%; width:170px; --fdur:34s; --fdelay:-12s; --frot:8deg; --fop:.9"><use href="#lotus"/></svg>
+  <svg class="sunset-flower" style="top:62%; left:80%; width:130px; --fdur:42s; --fdelay:-4s; --frot:-16deg; --fop:.88"><use href="#hibiscus"/></svg>
+  <svg class="sunset-flower" style="top:8%;  left:46%; width:90px;  --fdur:28s; --fdelay:-9s; --frot:20deg; --fop:.8"><use href="#hibiscus"/></svg>
+  <svg class="sunset-flower" style="top:78%; left:42%; width:110px; --fdur:36s; --fdelay:-16s; --frot:-6deg; --fop:.85"><use href="#lotus"/></svg>
+  <svg class="sunset-flower" style="top:40%; left:54%; width:80px;  --fdur:32s; --fdelay:-20s; --frot:12deg; --fop:.7"><use href="#hibiscus"/></svg>
+</div>
 
 <!-- =========================================================
      HERO
@@ -993,6 +1063,21 @@
       }, { passive: true });
       apply();
     }
+  })();
+
+  /* =========================================================
+     SUNSET REVEAL — light the fixed sunset scene once the
+     visitor scrolls past the hero.
+     ========================================================= */
+  (function () {
+    const scene = document.getElementById('sunsetScene');
+    if (!scene) return;
+    const onScroll = () => {
+      // lit once you've scrolled ~40% of the first viewport
+      scene.classList.toggle('lit', window.scrollY > window.innerHeight * 0.4);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
   })();
 
   /* =========================================================
