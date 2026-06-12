@@ -254,6 +254,32 @@
   .bubble-stage.js-bubbles #bubbleCanvas { display: block; }
   .bubble-stage.js-bubbles .bubble-fallback { display: none; }
 
+  /* countdown chip: shows when popped bubbles will bring the letters back */
+  .bubble-timer {
+    position: absolute;
+    left: 50%;
+    bottom: -14px;
+    transform: translateX(-50%) translateY(6px);
+    background: rgba(255,255,255,.78);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,.9);
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    box-shadow: 0 10px 26px rgba(58,46,63,.16);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .35s ease, transform .35s ease;
+  }
+  .bubble-timer.on {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .bubble-timer b { color: var(--orange); font-weight: 800; }
+
   /* ---- 3D BUBBLE TEXT (static fallback) ---- */
   .bubble {
     font-family: var(--head);
@@ -729,6 +755,7 @@
     <h1 class="sr-only">Amira's Smoothies</h1>
     <div class="bubble-stage" id="bubbleStage" aria-hidden="true">
       <canvas id="bubbleCanvas"></canvas>
+      <div class="bubble-timer" id="bubbleTimer">🫧 letters re-forming in <b>15</b>s</div>
       <!-- static fallback shown when JS is off or reduced motion is preferred -->
       <div class="bubble bubble-fallback">
         <span class="line line--one">
@@ -1013,6 +1040,8 @@
     let bubbles = [], droplets = [];
     let W = 0, H = 0, dpr = 1, nextAutoPop = 0;
     let layout = null; // title font sizes/baselines + gradient for the text underlay
+    const timerEl = document.getElementById('bubbleTimer');
+    let lastSecs = -1;
     const pointer = { x: -9999, y: -9999, in: false };
     let needsClear = false;
 
@@ -1131,9 +1160,13 @@
       nextAutoPop = performance.now() + 900;
     }
 
-    function pop(b, now) {
+    function pop(b, now, byUser) {
       b.state = 'gone';
-      b.respawnAt = now + 800 + Math.random() * 1100;
+      b.userPop = !!byUser;
+      // user pops stay gone for 15s+ (with a visible countdown);
+      // idle auto-fizz reforms quickly so the title never dissolves on its own
+      b.respawnAt = now + (byUser ? 15000 + Math.random() * 2500
+                                  : 800 + Math.random() * 1100);
       const n = 5 + Math.round(b.tier * 4);   // bigger bubbles burst into more drops
       for (let i = 0; i < n; i++) {
         const a = Math.random() * Math.PI * 2, v = rand(0.6, 2.6) * b.tier;
@@ -1151,7 +1184,7 @@
       for (const b of bubbles) {
         if (b.state !== 'alive') continue;
         const dx = b.x - pointer.x, dy = b.y - pointer.y;
-        if (dx * dx + dy * dy < (b.r + 7) * (b.r + 7)) pop(b, now);
+        if (dx * dx + dy * dy < (b.r + 7) * (b.r + 7)) pop(b, now, true);
       }
     }
 
@@ -1278,6 +1311,23 @@
         }
       }
       ctx.globalAlpha = 1;
+
+      // countdown chip: time until the last user-popped bubble returns
+      let latest = 0;
+      for (const b of bubbles) {
+        if (b.state === 'gone' && b.userPop && b.respawnAt > latest) latest = b.respawnAt;
+      }
+      if (latest > now && sE < 0.5) {
+        const secs = Math.ceil((latest - now) / 1000);
+        if (secs !== lastSecs) {
+          timerEl.querySelector('b').textContent = secs;
+          lastSecs = secs;
+        }
+        timerEl.classList.add('on');
+      } else {
+        timerEl.classList.remove('on');
+        lastSecs = -1;
+      }
     }
 
     function updatePointer(e) {
